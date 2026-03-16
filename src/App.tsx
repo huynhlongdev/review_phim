@@ -17,7 +17,13 @@ import {
   ChevronRight,
   History,
   Trash2,
-  Sparkles
+  Sparkles,
+  BookOpen,
+  Heart,
+  MessageCircle,
+  Users,
+  User,
+  Globe
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -45,8 +51,59 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
+  const [ttsProgress, setTtsProgress] = useState(0);
   const [randomLoading, setRandomLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('ngẫu nhiên');
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const categories = [
+    { id: 'ngẫu nhiên', label: 'Ngẫu nhiên', icon: <Sparkles size={16} /> },
+    { id: 'học đường', label: 'Học đường', icon: <BookOpen size={16} /> },
+    { id: 'tình yêu', label: 'Tình yêu', icon: <Heart size={16} /> },
+    { id: 'tâm sự', label: 'Tâm sự', icon: <MessageCircle size={16} /> },
+    { id: 'tình cha con', label: 'Tình cha con', icon: <Users size={16} /> },
+    { id: 'tình mẹ con', label: 'Tình mẹ con', icon: <User size={16} /> },
+    { id: 'cuộc sống', label: 'Cuộc sống', icon: <Globe size={16} /> },
+  ];
+
+  const categoryThemes: Record<string, string[]> = {
+    'học đường': [
+      "Tình bạn tuổi học trò dưới mái trường xưa",
+      "Người thầy giáo già và những học sinh cá biệt",
+      "Kỷ niệm mùa hè cuối cùng thời học sinh",
+      "Bức thư tình giấu kín trong ngăn bàn"
+    ],
+    'tình yêu': [
+      "Mối tình đầu dang dở sau 10 năm gặp lại",
+      "Tình yêu vượt qua khoảng cách địa lý và thời gian",
+      "Sự hy sinh thầm lặng trong tình yêu",
+      "Hẹn ước dưới gốc cây đa làng"
+    ],
+    'tâm sự': [
+      "Lời xin lỗi chưa kịp nói với người bạn thân",
+      "Những trăn trở của tuổi trẻ khi đứng trước ngưỡng cửa cuộc đời",
+      "Nỗi lòng của người con xa quê hương",
+      "Góc khuất sau vẻ hào nhoáng của thành thị"
+    ],
+    'tình cha con': [
+      "Tình cha con thầm lặng của người lái xe ôm",
+      "Bàn tay chai sạn của cha và giấc mơ của con",
+      "Chuyến đi cuối cùng của hai cha con",
+      "Chiếc xe đạp cũ và hành trình vào đại học"
+    ],
+    'tình mẹ con': [
+      "Nồi canh của mẹ và những ngày đông giá rét",
+      "Sự hy sinh cả đời của mẹ cho sự nghiệp của con",
+      "Lời ru của mẹ theo con suốt cuộc đời",
+      "Đôi mắt mẹ mờ đi vì sương gió"
+    ],
+    'cuộc sống': [
+      "Lòng tốt bất ngờ của người lạ trong đêm mưa Sài Gòn",
+      "Ước mơ dang dở của cô bán hàng rong và cái kết bất ngờ",
+      "Chuyến xe cuối cùng của năm và cuộc gặp gỡ định mệnh",
+      "Tiệm sửa giày cũ và những câu chuyện đời"
+    ]
+  };
 
   const clearInputs = () => {
     setMovieName('');
@@ -60,16 +117,15 @@ export default function App() {
 
   const generateRandomStory = async () => {
     setRandomLoading(true);
-    const themes = [
-      "Tình cha con thầm lặng của người lái xe ôm",
-      "Sự hối hận muộn màng của một người con xa xứ",
-      "Lòng tốt bất ngờ của người lạ trong đêm mưa Sài Gòn",
-      "Ước mơ dang dở của cô bán hàng rong và cái kết bất ngờ",
-      "Tình bạn già giữa hai người xa lạ ở công viên",
-      "Người thầy giáo vùng cao và lá thư sau 20 năm",
-      "Chuyến xe cuối cùng của năm và cuộc gặp gỡ định mệnh"
-    ];
-    const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+    let themes: string[] = [];
+    
+    if (selectedCategory === 'ngẫu nhiên') {
+      themes = Object.values(categoryThemes).flat();
+    } else {
+      themes = categoryThemes[selectedCategory] || [];
+    }
+    
+    const randomTheme = themes[Math.floor(Math.random() * themes.length)] || "Một câu chuyện đời thường đầy ý nghĩa";
     
     try {
       const prompt = `Hãy viết một câu chuyện kể chuyện cảm động về chủ đề: "${randomTheme}".
@@ -173,11 +229,20 @@ export default function App() {
     const text = customText || (review ? `Phim: ${review.title}\nNội dung: ${review.content}` : '');
     if (!text) return;
     setTtsLoading(true);
+    setTtsProgress(0);
+
+    // Simulate progress
+    const progressInterval = setInterval(() => {
+      setTtsProgress(prev => {
+        if (prev >= 90) return prev;
+        return prev + Math.random() * 10;
+      });
+    }, 500);
     
     try {
       const prompt = customText 
-        ? `Hãy đọc đoạn văn sau với giọng điệu ấm áp, truyền cảm và sâu lắng: ${customText}`
-        : `Hãy đọc bài review phim sau đây với giọng điệu kịch tính nhưng vẫn giữ được sự ấm áp, truyền cảm và sâu lắng:
+        ? `Hãy đọc đoạn văn sau với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên từ đầu đến cuối: ${customText}`
+        : `Hãy đọc bài review phim sau đây với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên từ đầu đến cuối:
           Phim: ${review?.title}
           Nội dung: ${review?.content}`;
 
@@ -194,14 +259,18 @@ export default function App() {
         },
       });
 
+      setTtsProgress(100);
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-        const byteCharacters = atob(base64Audio);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        // Use a more memory-efficient way to convert large base64 strings to Uint8Array
+        const res = await fetch(`data:application/octet-stream;base64,${base64Audio}`);
+        const arrayBuffer = await res.arrayBuffer();
+        let byteArray = new Uint8Array(arrayBuffer);
+        
+        // Ensure the data length is even for 16-bit PCM
+        if (byteArray.length % 2 !== 0) {
+          byteArray = byteArray.slice(0, byteArray.length - 1);
         }
-        const byteArray = new Uint8Array(byteNumbers);
         
         // Add WAV header to raw PCM data
         const wavHeader = createWavHeader(byteArray.length);
@@ -212,7 +281,9 @@ export default function App() {
     } catch (error) {
       console.error("Error generating TTS:", error);
     } finally {
+      clearInterval(progressInterval);
       setTtsLoading(false);
+      setTimeout(() => setTtsProgress(0), 1000);
     }
   };
 
@@ -220,7 +291,9 @@ export default function App() {
     if (!audioUrl) return;
     const link = document.createElement('a');
     link.href = audioUrl;
-    link.download = `${review?.title || 'cinevoice'}_audio.wav`;
+    // Use movieName or review title as filename
+    const fileName = (movieName || review?.title || 'cinevoice').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.download = `${fileName}.wav`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -274,17 +347,36 @@ export default function App() {
         {/* Search Section */}
         <div className="space-y-6 mb-16">
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
-              <div className="pl-4 text-zinc-500">
-                <Film size={20} />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-3 flex items-center gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
+                <div className="pl-4 text-zinc-500">
+                  <Film size={20} />
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Nhập tên bộ phim hoặc chủ đề..."
+                  className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600"
+                  value={movieName}
+                  onChange={(e) => setMovieName(e.target.value)}
+                />
               </div>
-              <input 
-                type="text" 
-                placeholder="Nhập tên bộ phim..."
-                className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600"
-                value={movieName}
-                onChange={(e) => setMovieName(e.target.value)}
-              />
+              
+              <div className="relative">
+                <select 
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full h-full p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus:border-emerald-500/50 transition-all outline-none text-zinc-300 appearance-none cursor-pointer backdrop-blur-xl text-sm"
+                >
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id} className="bg-zinc-900 text-zinc-300">
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                  <ChevronRight size={16} className="rotate-90" />
+                </div>
+              </div>
             </div>
 
             <textarea 
@@ -294,6 +386,21 @@ export default function App() {
               onChange={(e) => setMovieContent(e.target.value)}
             />
           </div>
+
+          {ttsLoading && (
+            <div className="space-y-2 animate-in fade-in duration-300">
+              <div className="flex justify-between text-[10px] uppercase tracking-widest text-emerald-500 font-bold">
+                <span>Đang tạo giọng đọc AI...</span>
+                <span>{Math.round(ttsProgress)}%</span>
+              </div>
+              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 transition-all duration-300 ease-out"
+                  style={{ width: `${ttsProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-end gap-2 md:gap-3">
             <button 
