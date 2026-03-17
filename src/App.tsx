@@ -58,6 +58,7 @@ export default function App() {
 
   const categories = [
     { id: 'ngẫu nhiên', label: 'Ngẫu nhiên', icon: <Sparkles size={16} /> },
+    { id: 'vùng miền', label: 'Vùng miền', icon: <Globe size={16} /> },
     { id: 'học đường', label: 'Học đường', icon: <BookOpen size={16} /> },
     { id: 'tình yêu', label: 'Tình yêu', icon: <Heart size={16} /> },
     { id: 'tâm sự', label: 'Tâm sự', icon: <MessageCircle size={16} /> },
@@ -67,6 +68,14 @@ export default function App() {
   ];
 
   const categoryThemes: Record<string, string[]> = {
+    'vùng miền': [
+      "Ký ức về những con hẻm nhỏ ở Hà Nội mùa thu",
+      "Chuyện tình bên bờ sông Hàn, Đà Nẵng",
+      "Vẻ đẹp cổ kính của Hội An, Quảng Nam và những phận đời",
+      "Hà Nội và những gánh hàng rong sáng sớm",
+      "Đà Nẵng - Thành phố của những cây cầu và tình người",
+      "Quảng Nam - Đất mẹ anh hùng và những kỷ niệm khó quên"
+    ],
     'học đường': [
       "Tình bạn tuổi học trò dưới mái trường xưa",
       "Người thầy giáo già và những học sinh cá biệt",
@@ -129,6 +138,11 @@ export default function App() {
     
     try {
       const prompt = `Hãy viết một câu chuyện kể chuyện cảm động về chủ đề: "${randomTheme}".
+      
+      Bối cảnh cụ thể: 
+      - Nếu chủ đề liên quan đến Hà Nội, hãy mô tả vẻ đẹp cổ kính, những con phố nhỏ, gánh hàng rong và nét thanh lịch của người Tràng An.
+      - Nếu chủ đề liên quan đến Đà Nẵng, hãy mô tả sự hiện đại hòa quyện cùng thiên nhiên, sông Hàn, những cây cầu và sự chân chất của người dân miền Trung.
+      - Nếu chủ đề liên quan đến Quảng Nam, hãy mô tả vẻ đẹp trầm mặc của Hội An, những cánh đồng lúa, và sự kiên cường của mảnh đất này.
       
       Phong cách:
       - Giống truyện kể trên YouTube (narration)
@@ -262,10 +276,18 @@ export default function App() {
       setTtsProgress(100);
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-        // Use a more memory-efficient way to convert large base64 strings to Uint8Array
-        const res = await fetch(`data:application/octet-stream;base64,${base64Audio}`);
-        const arrayBuffer = await res.arrayBuffer();
-        let byteArray = new Uint8Array(arrayBuffer);
+        // Sanitize base64 string (remove any potential whitespace/newlines)
+        const sanitizedBase64 = base64Audio.replace(/\s/g, '');
+        
+        // Convert base64 to Uint8Array more reliably
+        const binaryString = atob(sanitizedBase64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        let byteArray = bytes;
         
         // Ensure the data length is even for 16-bit PCM
         if (byteArray.length % 2 !== 0) {
@@ -275,6 +297,11 @@ export default function App() {
         // Add WAV header to raw PCM data
         const wavHeader = createWavHeader(byteArray.length);
         const wavBlob = new Blob([wavHeader, byteArray], { type: 'audio/wav' });
+        
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+        
         const url = URL.createObjectURL(wavBlob);
         setAudioUrl(url);
       }
