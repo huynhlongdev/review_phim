@@ -15,7 +15,7 @@ import {
   Loader2, 
   Mic2,
   ChevronRight,
-  History,
+  Download,
   Trash2,
   Sparkles,
   BookOpen,
@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+// @ts-ignore
+import lamejs from 'lamejs';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -48,194 +50,140 @@ export default function App() {
   const [movieContent, setMovieContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [review, setReview] = useState<MovieReview | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioParts, setAudioParts] = useState<{ url: string, title: string }[]>([]);
+  const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsProgress, setTtsProgress] = useState(0);
   const [randomLoading, setRandomLoading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('ngẫu nhiên');
+  const [error, setError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const categories = [
-    { id: 'ngẫu nhiên', label: 'Ngẫu nhiên', icon: <Sparkles size={16} /> },
-    { id: 'vùng miền', label: 'Vùng miền', icon: <Globe size={16} /> },
-    { id: 'học đường', label: 'Học đường', icon: <BookOpen size={16} /> },
-    { id: 'tình yêu', label: 'Tình yêu', icon: <Heart size={16} /> },
-    { id: 'tâm sự', label: 'Tâm sự', icon: <MessageCircle size={16} /> },
-    { id: 'tình cha con', label: 'Tình cha con', icon: <Users size={16} /> },
-    { id: 'tình mẹ con', label: 'Tình mẹ con', icon: <User size={16} /> },
-    { id: 'cuộc sống', label: 'Cuộc sống', icon: <Globe size={16} /> },
-  ];
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
-  const categoryThemes: Record<string, string[]> = {
-    'vùng miền': [
-      "Ký ức về những con hẻm nhỏ ở Hà Nội mùa thu",
-      "Chuyện tình bên bờ sông Hàn, Đà Nẵng",
-      "Vẻ đẹp cổ kính của Hội An, Quảng Nam và những phận đời",
-      "Hà Nội và những gánh hàng rong sáng sớm",
-      "Đà Nẵng - Thành phố của những cây cầu và tình người",
-      "Quảng Nam - Đất mẹ anh hùng và những kỷ niệm khó quên"
-    ],
-    'học đường': [
-      "Tình bạn tuổi học trò dưới mái trường xưa",
-      "Người thầy giáo già và những học sinh cá biệt",
-      "Kỷ niệm mùa hè cuối cùng thời học sinh",
-      "Bức thư tình giấu kín trong ngăn bàn"
-    ],
-    'tình yêu': [
-      "Mối tình đầu dang dở sau 10 năm gặp lại",
-      "Tình yêu vượt qua khoảng cách địa lý và thời gian",
-      "Sự hy sinh thầm lặng trong tình yêu",
-      "Hẹn ước dưới gốc cây đa làng"
-    ],
-    'tâm sự': [
-      "Lời xin lỗi chưa kịp nói với người bạn thân",
-      "Những trăn trở của tuổi trẻ khi đứng trước ngưỡng cửa cuộc đời",
-      "Nỗi lòng của người con xa quê hương",
-      "Góc khuất sau vẻ hào nhoáng của thành thị"
-    ],
-    'tình cha con': [
-      "Tình cha con thầm lặng của người lái xe ôm",
-      "Bàn tay chai sạn của cha và giấc mơ của con",
-      "Chuyến đi cuối cùng của hai cha con",
-      "Chiếc xe đạp cũ và hành trình vào đại học"
-    ],
-    'tình mẹ con': [
-      "Nồi canh của mẹ và những ngày đông giá rét",
-      "Sự hy sinh cả đời của mẹ cho sự nghiệp của con",
-      "Lời ru của mẹ theo con suốt cuộc đời",
-      "Đôi mắt mẹ mờ đi vì sương gió"
-    ],
-    'cuộc sống': [
-      "Lòng tốt bất ngờ của người lạ trong đêm mưa Sài Gòn",
-      "Ước mơ dang dở của cô bán hàng rong và cái kết bất ngờ",
-      "Chuyến xe cuối cùng của năm và cuộc gặp gỡ định mệnh",
-      "Tiệm sửa giày cũ và những câu chuyện đời"
-    ]
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
   };
 
   const clearInputs = () => {
     setMovieName('');
     setMovieContent('');
     setReview(null);
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
+    if (audioParts.length > 0) {
+      audioParts.forEach(part => URL.revokeObjectURL(part.url));
+      setAudioParts([]);
     }
   };
 
-  const generateRandomStory = async () => {
-    setRandomLoading(true);
-    let themes: string[] = [];
-    
-    if (selectedCategory === 'ngẫu nhiên') {
-      themes = Object.values(categoryThemes).flat();
-    } else {
-      themes = categoryThemes[selectedCategory] || [];
+  const generateStoryFromTitle = async () => {
+    if (!movieName.trim()) {
+      setError("Vui lòng nhập tiêu đề truyện trước khi tạo.");
+      return;
     }
-    
-    const randomTheme = themes[Math.floor(Math.random() * themes.length)] || "Một câu chuyện đời thường đầy ý nghĩa";
+    setRandomLoading(true);
+    setError(null);
     
     try {
-      const prompt = `Hãy viết một câu chuyện kể chuyện cảm động về chủ đề: "${randomTheme}".
-      
-      Bối cảnh cụ thể: 
-      - Nếu chủ đề liên quan đến Hà Nội, hãy mô tả vẻ đẹp cổ kính, những con phố nhỏ, gánh hàng rong và nét thanh lịch của người Tràng An.
-      - Nếu chủ đề liên quan đến Đà Nẵng, hãy mô tả sự hiện đại hòa quyện cùng thiên nhiên, sông Hàn, những cây cầu và sự chân chất của người dân miền Trung.
-      - Nếu chủ đề liên quan đến Quảng Nam, hãy mô tả vẻ đẹp trầm mặc của Hội An, những cánh đồng lúa, và sự kiên cường của mảnh đất này.
-      
-      Phong cách:
-      - Giống truyện kể trên YouTube (narration)
-      - Có yếu tố cảm động và bất ngờ
-      - Nhịp kể chậm rãi, sâu lắng
-      - Đoạn văn ngắn để dễ đọc (mỗi đoạn 1-3 câu)
-      
-      Cấu trúc:
-      - Hook gây tò mò trong 3 đoạn đầu
-      - Giới thiệu nhân vật chính là người bình thường trong xã hội Việt Nam hiện đại
-      - Biến cố thay đổi cuộc đời
-      - Nhân vật gặp một người đặc biệt
-      - Mối quan hệ dần phát triển
-      - Cao trào cảm xúc và thử thách lớn
-      - Plot twist nhẹ
-      - Kết thúc ý nghĩa, khiến người nghe suy ngẫm
-      
-      Yêu cầu kỹ thuật:
-      - Độ dài: Cố gắng viết chi tiết, dài và sâu sắc (khoảng 1200-2000 từ nếu có thể).
-      - Văn phong: Kể chuyện chậm rãi, cảm xúc, dễ nghe.
-      - Không dùng hội thoại quá dài.
-      - Viết theo giọng kể chuyện, không chia tiêu đề.
-      - Phù hợp để đọc bằng AI voice.
-      
-      Bối cảnh: Việt Nam hiện đại.`;
+      const prompt = `Bạn là một nhà văn chuyên viết truyện kể cảm động, giàu cảm xúc. Hãy viết một câu chuyện dựa trên TIÊU ĐỀ sau: "${movieName}"
+
+## NHIỆM VỤ:
+- **BỐI CẢNH**: Tự động suy luận và xây dựng bối cảnh phù hợp nhất dựa trên TIÊU ĐỀ. Nếu tiêu đề gợi ý về:
+  * Một địa danh cụ thể (Hà Nội, Sài Gòn, Huế, Đà Nẵng, Hội An, v.v.) → lấy bối cảnh chính tại nơi đó
+  * Một nghề nghiệp, sự kiện, thời gian → xây dựng bối cảnh tương ứng
+  * Không có gợi ý rõ ràng → sáng tạo bối cảnh Việt Nam hiện đại phù hợp với câu chuyện
+
+## NHÂN VẬT:
+- Tạo 1-2 nhân vật chính (nam/nữ, già/trẻ) với tên thuần Việt, gần gũi
+- Khắc họa tính cách, hoàn cảnh sống và khát vọng của nhân vật một cách tự nhiên
+
+## CẤU TRÚC TRUYỆN (Khoảng 1500-2000 từ):
+
+**Mở đầu (3-4 đoạn)**
+- Hook gây tò mò ngay từ những dòng đầu tiên
+- Giới thiệu bối cảnh không gian, thời gian
+- Gợi mở vấn đề hoặc cảm xúc chủ đạo
+
+**Giới thiệu nhân vật (4-5 đoạn)**
+- Giới thiệu nhân vật chính
+- Khắc họa cuộc sống, thói quen, những điều bình dị
+- Ẩn chứa những trăn trở, khao khát thầm kín
+
+**Biến cố (3-4 đoạn)**
+- Một sự kiện bất ngờ xảy ra, thay đổi cuộc đời nhân vật
+- Có thể là mất mát, cơ hội, cuộc gặp định mệnh
+- Đẩy nhân vật vào tình huống phải lựa chọn
+
+**Hành trình và kết nối (5-6 đoạn)**
+- Nhân vật gặp một người đặc biệt (tri kỷ, ân nhân, hoặc người cần giúp đỡ)
+- Mối quan hệ phát triển tự nhiên qua những chi tiết nhỏ
+- Những hy sinh, thấu hiểu và đồng cảm
+
+**Cao trào và bất ngờ (3-4 đoạn)**
+- Thử thách lớn nhất đặt ra
+- Bí mật được hé lộ (về quá khứ, về nhân vật thứ hai)
+- Plot twist nhẹ nhàng nhưng đủ sâu sắc, không khiên cưỡng
+
+**Kết thúc (2-3 đoạn)**
+- Giải quyết vấn đề theo hướng nhân văn
+- Đọng lại cảm xúc, dư âm
+- Thông điệp ý nghĩa về tình người, cuộc sống
+
+## PHONG CÁCH VIẾT:
+✓ **Giọng văn**: Chậm rãi, sâu lắng, giàu hình ảnh, như đang kể chuyện đêm khuya
+✓ **Câu văn**: Ngắn gọn (1-3 câu/đoạn), dễ đọc, dễ nghe, phù hợp với AI voice
+✓ **Ngôn từ**: Trong sáng, giàu chất thơ, đậm chất Việt Nam
+✓ **Cảm xúc**: Tinh tế, không sướt mướt nhưng đủ lay động
+✓ **Nhịp điệu**: Linh hoạt - lúc chậm để lắng đọng, lúc nhanh để tạo kịch tính
+
+## LƯU Ý:
+- KHÔNG dùng hội thoại quá dài, chủ yếu là kể chuyện
+- KHÔNG chia thành các phần như trên (viết liền mạch)
+- KHÔNG dùng tiêu đề phụ, chỉ viết thuần văn xuôi
+- ĐẶC BIỆT: Bối cảnh phải PHÙ HỢP VỚI TIÊU ĐỀ - nếu tiêu đề nhắc đến địa danh nào, hãy khai thác chất liệu văn hóa, con người nơi đó
+- Hãy để câu chuyện tự nhiên như đang kể cho người thân nghe
+
+Bắt đầu câu chuyện ngay bây giờ:`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview", // Use Pro for longer, better stories
+        model: "gemini-3-flash-preview", // Switch to Flash to avoid quota issues
         contents: prompt,
       });
 
       const story = response.text || '';
       setMovieContent(story);
-      setMovieName(randomTheme);
       setReview(null); // Clear previous review if any
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating random story:", error);
+      if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        setError("Hệ thống đang quá tải (hết lượt dùng thử). Vui lòng thử lại sau vài phút hoặc đổi chủ đề khác.");
+      } else {
+        setError("Có lỗi xảy ra khi tạo truyện. Vui lòng thử lại.");
+      }
     } finally {
       setRandomLoading(false);
-    }
-  };
-
-  // Helper to create a WAV header for raw PCM data (16-bit, mono, 24000Hz)
-  const createWavHeader = (dataLength: number) => {
-    const buffer = new ArrayBuffer(44);
-    const view = new DataView(buffer);
-    view.setUint32(0, 0x52494646, false); // "RIFF"
-    view.setUint32(4, 36 + dataLength, true); // file length
-    view.setUint32(8, 0x57415645, false); // "WAVE"
-    view.setUint32(12, 0x666d7420, false); // "fmt "
-    view.setUint32(16, 16, true); // format chunk length
-    view.setUint16(20, 1, true); // sample format (PCM)
-    view.setUint16(22, 1, true); // channel count (mono)
-    view.setUint32(24, 24000, true); // sample rate
-    view.setUint32(28, 24000 * 2, true); // byte rate
-    view.setUint16(32, 2, true); // block align
-    view.setUint16(34, 16, true); // bits per sample
-    view.setUint32(36, 0x64617461, false); // "data"
-    view.setUint32(40, dataLength, true); // data chunk length
-    return buffer;
-  };
-
-  const generateReview = async () => {
-    if (!movieName.trim()) return;
-    setLoading(true);
-    setReview(null);
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
-    }
-    
-    try {
-      const prompt = `Hãy viết một bài review phim cực kỳ kịch tính, hấp dẫn và sâu sắc cho bộ phim: "${movieName}". 
-        ${movieContent ? `Dựa trên nội dung/tóm tắt sau: "${movieContent}"` : ''}
-        Yêu cầu:
-        1. Ngôn ngữ: Tiếng Việt.
-        2. Phong cách: Chuyên nghiệp, lôi cuốn, có cao trào.
-        3. Định dạng JSON: { "title": "Tên phim", "content": "Nội dung review", "rating": 8.5, "genre": "Thể loại", "year": "Năm phát hành" }`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        }
-      });
-
-      const data = JSON.parse(response.text || '{}') as MovieReview;
-      setReview(data);
-    } catch (error) {
-      console.error("Error generating review:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -244,69 +192,125 @@ export default function App() {
     if (!text) return;
     setTtsLoading(true);
     setTtsProgress(0);
+    setError(null);
 
-    // Simulate progress
+    // Clear old parts
+    audioParts.forEach(part => URL.revokeObjectURL(part.url));
+    setAudioParts([]);
+
+    // Split text into 3 parts
+    const sentences = text.split(/[.!?]\s+/);
+    const partSize = Math.ceil(sentences.length / 3);
+    const textParts = [
+      sentences.slice(0, partSize).join('. ') + '.',
+      sentences.slice(partSize, partSize * 2).join('. ') + '.',
+      sentences.slice(partSize * 2).join('. ') + '.'
+    ].filter(p => p.trim().length > 1);
+
     const progressInterval = setInterval(() => {
       setTtsProgress(prev => {
-        if (prev >= 90) return prev;
-        return prev + Math.random() * 10;
+        if (prev >= 95) return prev;
+        return prev + 2;
       });
     }, 500);
-    
-    try {
-      const prompt = customText 
-        ? `Hãy đọc đoạn văn sau với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên từ đầu đến cuối: ${customText}`
-        : `Hãy đọc bài review phim sau đây với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên từ đầu đến cuối:
-          Phim: ${review?.title}
-          Nội dung: ${review?.content}`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }, 
+    try {
+      const newParts: { url: string, title: string }[] = [];
+
+      for (let i = 0; i < textParts.length; i++) {
+        const partText = textParts[i];
+        const prompt = `Hãy đọc đoạn văn sau với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên: ${partText}`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: prompt }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
+              },
             },
           },
-        },
-      });
+        });
 
-      setTtsProgress(100);
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        // Sanitize base64 string (remove any potential whitespace/newlines)
-        const sanitizedBase64 = base64Audio.replace(/\s/g, '');
-        
-        // Convert base64 to Uint8Array more reliably
-        const binaryString = atob(sanitizedBase64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        const decodedChunks: Uint8Array[] = [];
+        let totalByteLength = 0;
+
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            const sanitizedBase64 = part.inlineData.data.replace(/\s/g, '');
+            const binaryString = atob(sanitizedBase64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let j = 0; j < binaryString.length; j++) {
+              bytes[j] = binaryString.charCodeAt(j);
+            }
+            decodedChunks.push(bytes);
+            totalByteLength += bytes.length;
+          }
         }
-        
-        let byteArray = bytes;
-        
-        // Ensure the data length is even for 16-bit PCM
-        if (byteArray.length % 2 !== 0) {
-          byteArray = byteArray.slice(0, byteArray.length - 1);
+
+        if (decodedChunks.length > 0) {
+          const combinedBytes = new Uint8Array(totalByteLength);
+          let offset = 0;
+          for (const chunk of decodedChunks) {
+            combinedBytes.set(chunk, offset);
+            offset += chunk.length;
+          }
+
+          // Convert to MP3
+          try {
+            const pcmLength = Math.floor(combinedBytes.length / 2);
+            const int16Samples = new Int16Array(combinedBytes.buffer, combinedBytes.byteOffset, pcmLength);
+            const lame = (lamejs as any).default || lamejs;
+            const mp3encoder = new lame.Mp3Encoder(1, 24000, 128);
+            const mp3Data: Uint8Array[] = [];
+            
+            const chunkSize = 1152 * 10;
+            for (let j = 0; j < int16Samples.length; j += chunkSize) {
+              const chunk = int16Samples.subarray(j, j + chunkSize);
+              const mp3buf = mp3encoder.encodeBuffer(chunk);
+              if (mp3buf.length > 0) mp3Data.push(new Uint8Array(mp3buf));
+            }
+            
+            const mp3Final = mp3encoder.flush();
+            if (mp3Final.length > 0) mp3Data.push(new Uint8Array(mp3Final));
+            
+            const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            newParts.push({ url: URL.createObjectURL(blob), title: `Phần ${i + 1}` });
+          } catch (e) {
+            // Fallback to WAV
+            const wavHeader = new ArrayBuffer(44);
+            const view = new DataView(wavHeader);
+            view.setUint32(0, 0x52494646, false);
+            view.setUint32(4, 36 + combinedBytes.length, true);
+            view.setUint32(8, 0x57415645, false);
+            view.setUint32(12, 0x666d7420, false);
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, 24000, true);
+            view.setUint32(28, 24000 * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            view.setUint32(36, 0x64617461, false);
+            view.setUint32(40, combinedBytes.length, true);
+            
+            const blob = new Blob([wavHeader, combinedBytes], { type: 'audio/wav' });
+            newParts.push({ url: URL.createObjectURL(blob), title: `Phần ${i + 1}` });
+          }
         }
-        
-        // Add WAV header to raw PCM data
-        const wavHeader = createWavHeader(byteArray.length);
-        const wavBlob = new Blob([wavHeader, byteArray], { type: 'audio/wav' });
-        
-        if (audioUrl) {
-          URL.revokeObjectURL(audioUrl);
-        }
-        
-        const url = URL.createObjectURL(wavBlob);
-        setAudioUrl(url);
+        setTtsProgress(Math.round(((i + 1) / textParts.length) * 100));
       }
-    } catch (error) {
+
+      setAudioParts(newParts);
+      setCurrentPartIndex(0);
+      setCurrentTime(0);
+      setDuration(0);
+    } catch (error: any) {
       console.error("Error generating TTS:", error);
+      setError("Có lỗi xảy ra khi tạo giọng nói. Vui lòng thử lại.");
     } finally {
       clearInterval(progressInterval);
       setTtsLoading(false);
@@ -314,16 +318,24 @@ export default function App() {
     }
   };
 
-  const downloadAudio = () => {
-    if (!audioUrl) return;
+  const downloadAudio = (index: number) => {
+    const part = audioParts[index];
+    if (!part) return;
     const link = document.createElement('a');
-    link.href = audioUrl;
-    // Use movieName or review title as filename
-    const fileName = (movieName || review?.title || 'cinevoice').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    link.download = `${fileName}.wav`;
+    link.href = part.url;
+    const fileName = (movieName || review?.title || 'blogradio').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const extension = part.url.includes('audio/wav') || !part.url.includes('mp3') ? 'wav' : 'mp3';
+    link.download = `${fileName}_part${index + 1}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const switchPart = (index: number) => {
+    setCurrentPartIndex(index);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
   };
 
   const togglePlay = () => {
@@ -338,15 +350,16 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      audioParts.forEach(part => URL.revokeObjectURL(part.url));
     };
-  }, [audioUrl]);
+  }, [audioParts]);
 
   useEffect(() => {
-    if (audioUrl && audioRef.current) {
+    if (audioParts.length > 0 && audioRef.current) {
+      audioRef.current.load();
       audioRef.current.play().catch(e => console.error("Auto-play failed:", e));
     }
-  }, [audioUrl]);
+  }, [currentPartIndex, audioParts]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-emerald-500/30">
@@ -360,50 +373,38 @@ export default function App() {
         {/* Header */}
         <header className="mb-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium mb-6">
-            <Film size={14} />
-            AI MOVIE REVIEWER
+            <Mic2 size={14} />
+            AI BLOG RADIO
           </div>
           <h1 className="text-3xl md:text-5xl font-bold tracking-tight mb-4 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent">
-            CineVoice AI
+            Blog Radio AI
           </h1>
           <p className="text-zinc-400 text-base max-w-xl mx-auto">
-            Khám phá những góc nhìn điện ảnh sâu sắc với giọng đọc AI kịch tính và đầy cảm xúc.
+            Lắng nghe những câu chuyện đời thường, những tâm sự sâu lắng qua giọng đọc AI truyền cảm.
           </p>
         </header>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm text-center animate-in fade-in slide-in-from-top-2 duration-300">
+            {error}
+          </div>
+        )}
 
         {/* Search Section */}
         <div className="space-y-6 mb-16">
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-3 flex items-center gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
-                <div className="pl-4 text-zinc-500">
-                  <Film size={20} />
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Nhập tên bộ phim hoặc chủ đề..."
-                  className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600"
-                  value={movieName}
-                  onChange={(e) => setMovieName(e.target.value)}
-                />
+            <div className="flex items-center gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
+              <div className="pl-4 text-zinc-500">
+                <Film size={20} />
               </div>
-              
-              <div className="relative">
-                <select 
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full h-full p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus:border-emerald-500/50 transition-all outline-none text-zinc-300 appearance-none cursor-pointer backdrop-blur-xl text-sm"
-                >
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id} className="bg-zinc-900 text-zinc-300">
-                      {cat.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                  <ChevronRight size={16} className="rotate-90" />
-                </div>
-              </div>
+              <input 
+                type="text" 
+                placeholder="Nhập tiêu đề câu chuyện bạn muốn kể..."
+                className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600"
+                value={movieName}
+                onChange={(e) => setMovieName(e.target.value)}
+              />
             </div>
 
             <textarea 
@@ -438,12 +439,12 @@ export default function App() {
               Xóa
             </button>
             <button 
-              onClick={generateRandomStory}
+              onClick={generateStoryFromTitle}
               disabled={randomLoading}
               className="px-4 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-sm font-bold rounded-xl transition-all flex items-center gap-2 border border-blue-500/30"
             >
               {randomLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-              Truyện Ngẫu Nhiên
+              Tạo Truyện
             </button>
             <button 
               onClick={() => generateTTS(movieContent)}
@@ -453,152 +454,131 @@ export default function App() {
               {ttsLoading ? <Loader2 className="animate-spin" size={16} /> : <Mic2 size={16} />}
               Tạo Voice
             </button>
-            <button 
-              onClick={generateReview}
-              disabled={loading || !movieName.trim()}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-900/20"
-            >
-              {loading ? <Loader2 className="animate-spin" size={16} /> : <ChevronRight size={16} />}
-              Tạo Review
-            </button>
           </div>
         </div>
 
         {/* Audio Player UI (Global) */}
-        {audioUrl && (
-          <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl flex items-center gap-6 backdrop-blur-xl shadow-2xl shadow-emerald-900/20">
+        {audioParts.length > 0 && (
+          <div className="mb-12 space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex items-center justify-between">
+              <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest">Danh sách phần</h3>
+              <button 
+                onClick={() => audioParts.forEach((_, i) => downloadAudio(i))}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-black text-[10px] font-bold uppercase tracking-wider transition-all border border-emerald-500/20"
+              >
+                <Download size={12} />
+                Tải tất cả
+              </button>
+            </div>
+            {/* Parts List */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {audioParts.map((part, idx) => (
+                <div 
+                  key={idx}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group",
+                    currentPartIndex === idx 
+                      ? "bg-emerald-500/20 border-emerald-500/40 shadow-lg shadow-emerald-500/10" 
+                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                  )}
+                  onClick={() => switchPart(idx)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
+                      currentPartIndex === idx ? "bg-emerald-500 text-black" : "bg-zinc-800 text-zinc-400"
+                    )}>
+                      {idx + 1}
+                    </div>
+                    <span className={cn(
+                      "text-sm font-medium",
+                      currentPartIndex === idx ? "text-emerald-400" : "text-zinc-400"
+                    )}>
+                      {part.title}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadAudio(idx);
+                    }}
+                    className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:bg-emerald-500 hover:text-black transition-all shadow-sm"
+                    title="Tải về phần này"
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Main Player */}
+            <div className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl flex items-center gap-5 backdrop-blur-xl shadow-2xl shadow-emerald-900/20">
               <button 
                 onClick={togglePlay}
-                className="w-16 h-16 rounded-full bg-emerald-500 text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-500/40"
+                className="w-12 h-12 rounded-full bg-emerald-500 text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-500/40 shrink-0"
               >
-                {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
+                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
               </button>
               
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-emerald-400 text-sm font-bold uppercase tracking-widest flex items-center gap-2">
                     <Volume2 size={16} />
-                    {review ? `Review: ${review.title}` : "Giọng đọc AI theo yêu cầu"}
+                    {audioParts[currentPartIndex].title}
                   </span>
-                  <button 
-                    onClick={downloadAudio}
-                    className="px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-black text-xs font-bold transition-all border border-emerald-500/30"
-                  >
-                    Tải về (.wav)
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => downloadAudio(currentPartIndex)}
+                      className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all border border-emerald-500/30"
+                      title="Tải về phần hiện tại"
+                    >
+                      <Download size={14} />
+                    </button>
+                    <span className="text-zinc-500 text-[10px] uppercase font-bold">Đang phát phần {currentPartIndex + 1}/3</span>
+                  </div>
                 </div>
-                <div className="h-2 bg-zinc-800/50 rounded-full overflow-hidden border border-zinc-700/30">
-                  <div className={cn(
-                    "h-full bg-emerald-500 transition-all duration-300",
-                    isPlaying ? "w-full animate-pulse" : "w-1/3"
-                  )} />
+                
+                <div className="flex items-center gap-3">
+                  <span className="text-emerald-400/70 text-xs font-mono w-10">
+                    {formatTime(currentTime)}
+                  </span>
+                  <div className="flex-1 relative group h-6 flex items-center">
+                    <input 
+                      type="range"
+                      min={0}
+                      max={duration || 0}
+                      step={0.1}
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="absolute inset-0 w-full h-1.5 bg-zinc-800/50 rounded-full appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-all z-10"
+                      style={{
+                        background: `linear-gradient(to right, #10b981 ${(currentTime / (duration || 1)) * 100}%, #27272a 0%)`
+                      }}
+                    />
+                  </div>
+                  <span className="text-emerald-400/70 text-xs font-mono w-10 text-right">
+                    {formatTime(duration)}
+                  </span>
                 </div>
               </div>
               
               <audio 
                 ref={audioRef} 
-                src={audioUrl} 
-                onEnded={() => setIsPlaying(false)}
+                src={audioParts[currentPartIndex].url} 
+                onEnded={() => {
+                  if (currentPartIndex < audioParts.length - 1) {
+                    switchPart(currentPartIndex + 1);
+                  } else {
+                    setIsPlaying(false);
+                  }
+                }}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
                 className="hidden"
               />
             </div>
-          </div>
-        )}
-
-        {/* Content Section */}
-        {review && (
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Movie Info Card */}
-              <div className="md:col-span-1">
-                <div className="bg-zinc-900/40 border border-zinc-800 rounded-3xl p-6 sticky top-8 backdrop-blur-md">
-                  <div className="aspect-[2/3] bg-zinc-800 rounded-2xl mb-6 overflow-hidden relative group">
-                    <img 
-                      src={`https://picsum.photos/seed/${review.title}/600/900`} 
-                      alt={review.title}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <div className="flex items-center gap-1 text-yellow-500 mb-1">
-                        <Star size={16} fill="currentColor" />
-                        <span className="font-bold text-lg">{review.rating}</span>
-                        <span className="text-zinc-400 text-sm font-normal">/10</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Thể loại</label>
-                      <p className="text-zinc-200">{review.genre}</p>
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Năm phát hành</label>
-                      <p className="text-zinc-200">{review.year}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-8">
-                    <button 
-                      onClick={() => generateTTS()}
-                      disabled={ttsLoading}
-                      className="w-full py-3 bg-white text-black text-sm font-bold rounded-2xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
-                    >
-                      {ttsLoading ? (
-                        <Loader2 className="animate-spin" size={18} />
-                      ) : (
-                        <>
-                          <Mic2 size={18} />
-                          Nghe Review AI
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Review Content */}
-              <div className="md:col-span-2 space-y-8">
-                <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-3xl p-8 md:p-10 backdrop-blur-sm">
-                  <h2 className="text-2xl font-bold mb-6 text-white leading-tight">
-                    {review.title}
-                  </h2>
-                  
-                  <div className="prose prose-invert max-w-none">
-                    <p className="text-zinc-300 text-base leading-relaxed whitespace-pre-wrap italic">
-                      "{review.content}"
-                    </p>
-                  </div>
-                </div>
-
-                {/* Additional Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
-                    <History className="text-emerald-500 mb-3" size={24} />
-                    <h4 className="font-bold text-white mb-1">Kịch tính</h4>
-                    <p className="text-zinc-500 text-sm">Giọng đọc được tối ưu cho các phân cảnh cao trào.</p>
-                  </div>
-                  <div className="p-6 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
-                    <Star className="text-emerald-500 mb-3" size={24} />
-                    <h4 className="font-bold text-white mb-1">Sâu sắc</h4>
-                    <p className="text-zinc-500 text-sm">Phân tích đa chiều về nội dung và nghệ thuật.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!review && !loading && (
-          <div className="mt-24 text-center py-20 border-2 border-dashed border-zinc-800 rounded-3xl">
-            <Film className="mx-auto text-zinc-700 mb-4" size={48} />
-            <p className="text-zinc-500">Bắt đầu bằng cách tìm kiếm bộ phim yêu thích của bạn.</p>
           </div>
         )}
 
@@ -613,7 +593,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="relative z-10 py-12 border-t border-zinc-900 text-center text-zinc-600 text-sm">
-        <p>© 2026 CineVoice AI. Powered by Gemini Flash 2.5 & 3.1</p>
+        <p>© 2026 Blog Radio AI. Powered by Gemini Flash 2.5 & 3.1</p>
       </footer>
     </div>
   );
