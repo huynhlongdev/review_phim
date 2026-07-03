@@ -23,7 +23,9 @@ import {
   MessageCircle,
   Users,
   User,
-  Globe
+  Globe,
+  Smile,
+  Laugh
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -60,6 +62,11 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // New state variables
+  const [selectedGenre, setSelectedGenre] = useState('tinh_yeu'); // 'hai_huoc' | 'tinh_yeu' | 'cha_me' | 'hoc_duong'
+  const [voiceGender, setVoiceGender] = useState('nam'); // 'nam' | 'nu'
+  const [themeSuggestionLoading, setThemeSuggestionLoading] = useState(false);
 
   const formatTime = (time: number) => {
     if (isNaN(time)) return "0:00";
@@ -98,77 +105,84 @@ export default function App() {
     }
   };
 
-  const generateStoryFromTitle = async () => {
+  const generateTopicSuggestion = async () => {
+    setThemeSuggestionLoading(true);
+    setError(null);
+    try {
+      const genreNames: Record<string, string> = {
+        'hai_huoc': 'hài hước, vui nhộn, hóm hỉnh về cuộc sống hàng ngày hoặc động vật cưng tinh nghịch',
+        'tinh_yeu': 'tình yêu đôi lứa lãng mạn, ngọt ngào hoặc những rung động nhẹ nhàng',
+        'cha_me': 'tình cảm gia đình thiêng liêng, lòng biết ơn cha mẹ hoặc sự thấu hiểu giữa con cái và cha mẹ',
+        'hoc_duong': 'kỷ niệm học trò tinh nghịch, tình bạn thanh xuân rực rỡ, thầy cô và trường lớp thân thương',
+        'tieu_lam': 'truyện tiếu lâm dân gian, trạng cười hoặc truyện hài hước dí dỏm, châm biếm thông minh mang phong cách dân dã Việt Nam'
+      };
+      const genreName = genreNames[selectedGenre] || 'tình yêu';
+      const prompt = `Bạn là một biên tập viên radio tài năng. Hãy gợi ý một chủ đề truyện mô tả ngắn gọn khoảng 1-2 câu để viết một câu chuyện phát thanh thuộc thể loại "${genreName}". Chủ đề phải gần gũi, dí dỏm hoặc sâu lắng tùy theo thể loại, đong đầy cảm xúc và cực kỳ lôi cuốn người nghe. Hãy sáng tạo ngẫu nhiên một ý tưởng độc đáo, mới mẻ. Chỉ trả về duy nhất câu gợi ý đó, không thêm bất kỳ tiêu đề, nhãn hay lời giải thích nào khác.`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+      
+      const suggestion = (response.text || '').trim().replace(/^"|"$/g, '');
+      setMovieName(suggestion);
+    } catch (error: any) {
+      console.error("Error generating theme suggestion:", error);
+      setError("Không thể gợi ý chủ đề tự động. Bạn có thể tự nhập ý tưởng của mình.");
+    } finally {
+      setThemeSuggestionLoading(false);
+    }
+  };
+
+  const generateStoryFromDescription = async () => {
     if (!movieName.trim()) {
-      setError("Vui lòng nhập tiêu đề truyện trước khi tạo.");
+      setError("Vui lòng nhập mô tả câu chuyện hoặc chọn 'Gợi ý chủ đề' trước khi tạo.");
       return;
     }
     setRandomLoading(true);
     setError(null);
     
     try {
-      const prompt = `Bạn là một nhà văn chuyên viết truyện kể cảm động, giàu cảm xúc. Hãy viết một câu chuyện dựa trên TIÊU ĐỀ sau: "${movieName}"
+      const genreNames: Record<string, string> = {
+        'hai_huoc': 'hài hước, vui nhộn, hóm hỉnh',
+        'tinh_yeu': 'tình yêu đôi lứa, lãng mạn, ngọt ngào',
+        'cha_me': 'tình cảm gia đình, tình cha mẹ và con cái ấm áp, cảm động',
+        'hoc_duong': 'chuyện học đường, tình bạn tuổi học trò thanh xuân tinh nghịch',
+        'tieu_lam': 'tiếu lâm, truyện cười dân gian dóm dỉnh, hài hước châm biếm thông minh và hóm hỉnh của Việt Nam'
+      };
+      const genreText = genreNames[selectedGenre] || 'truyện kể radio';
 
-## NHIỆM VỤ:
-- **BỐI CẢNH**: Tự động suy luận và xây dựng bối cảnh phù hợp nhất dựa trên TIÊU ĐỀ. Nếu tiêu đề gợi ý về:
-  * Một địa danh cụ thể (Hà Nội, Sài Gòn, Huế, Đà Nẵng, Hội An, v.v.) → lấy bối cảnh chính tại nơi đó
-  * Một nghề nghiệp, sự kiện, thời gian → xây dựng bối cảnh tương ứng
-  * Không có gợi ý rõ ràng → sáng tạo bối cảnh Việt Nam hiện đại phù hợp với câu chuyện
+      const prompt = `Bạn là một nhà văn chuyên viết truyện ngắn phát thanh xuất sắc, giàu cảm xúc. Hãy viết một câu chuyện thuộc thể loại "${genreText}" dựa trên MÔ TẢ/Ý TƯỞNG sau: "${movieName}"
 
-## NHÂN VẬT:
-- Tạo 1-2 nhân vật chính (nam/nữ, già/trẻ) với tên thuần Việt, gần gũi
-- Khắc họa tính cách, hoàn cảnh sống và khát vọng của nhân vật một cách tự nhiên
+## YÊU CẦU ĐẶC BIỆT VỀ ĐỘ DÀI (QUAN TRỌNG NHẤT):
+- **Độ dài tổng cộng**: Phải nằm trong khoảng **400 đến 500 từ** (không viết ngắn quá và tuyệt đối không viết dài quá 500 từ). Độ dài này rất quan trọng để đảm bảo thời lượng đọc của radio kéo dài khoảng từ **3 đến 4 phút** với tốc độ đọc truyền cảm tự nhiên.
 
-## CẤU TRÚC TRUYỆN (Khoảng 1500-2000 từ):
+## NHÂN VẬT & BỐI CẢNH (YÊU CẦU NGẪU NHIÊN):
+- **Bắt buộc đặt tên nhân vật NGẪU NHIÊN và ĐA DẠNG**: Tránh dùng đi dùng lại các tên quá phổ biến như Nam, Vy. Hãy chọn ngẫu nhiên các tên thuần Việt độc đáo, phù hợp cho 1-2 nhân vật chính (ví dụ: chú Út, thím Năm, ông đồ Sắn, anh Gù, bé Mận, lý trưởng, xã trưởng, Trạng cười, tú tài, Kiên, Hùng, Thảo, Hương, Kha, Đan, Giang, Bình, v.v.).
+- Xây dựng bối cảnh sinh động của Việt Nam phù hợp nhất với thể loại được chọn:
+  * Nếu là **Tiếu lâm**: Lấy bối cảnh làng quê Việt Nam xưa (ao làng, đình làng, chợ phiên) hoặc tình huống trớ trêu, dở khóc dở cười thời hiện đại để tạo tiếng cười dân dã, trào phúng vui vẻ.
+  * Nếu là các thể loại khác: Bối cảnh ấm áp, gần gũi, giàu cảm xúc.
 
-**Mở đầu (3-4 đoạn)**
-- Hook gây tò mò ngay từ những dòng đầu tiên
-- Giới thiệu bối cảnh không gian, thời gian
-- Gợi mở vấn đề hoặc cảm xúc chủ đạo
-
-**Giới thiệu nhân vật (4-5 đoạn)**
-- Giới thiệu nhân vật chính
-- Khắc họa cuộc sống, thói quen, những điều bình dị
-- Ẩn chứa những trăn trở, khao khát thầm kín
-
-**Biến cố (3-4 đoạn)**
-- Một sự kiện bất ngờ xảy ra, thay đổi cuộc đời nhân vật
-- Có thể là mất mát, cơ hội, cuộc gặp định mệnh
-- Đẩy nhân vật vào tình huống phải lựa chọn
-
-**Hành trình và kết nối (5-6 đoạn)**
-- Nhân vật gặp một người đặc biệt (tri kỷ, ân nhân, hoặc người cần giúp đỡ)
-- Mối quan hệ phát triển tự nhiên qua những chi tiết nhỏ
-- Những hy sinh, thấu hiểu và đồng cảm
-
-**Cao trào và bất ngờ (3-4 đoạn)**
-- Thử thách lớn nhất đặt ra
-- Bí mật được hé lộ (về quá khứ, về nhân vật thứ hai)
-- Plot twist nhẹ nhàng nhưng đủ sâu sắc, không khiên cưỡng
-
-**Kết thúc (2-3 đoạn)**
-- Giải quyết vấn đề theo hướng nhân văn
-- Đọng lại cảm xúc, dư âm
-- Thông điệp ý nghĩa về tình người, cuộc sống
+## CẤU TRÚC TRUYỆN:
+- Viết thành **3 đoạn văn** rõ ràng, cân đối về mặt độ dài. Mỗi đoạn văn sẽ được đọc ở một phần radio riêng biệt.
+- **Đoạn 1**: Mở đầu dẫn dắt người nghe, khơi gợi cảm hứng và giới thiệu hoàn cảnh.
+- **Đoạn 2**: Diễn biến chính, có nút thắt/cao trào hoặc tình tiết đáng chú ý của câu chuyện.
+- **Đoạn 3**: Giải quyết vấn đề nhẹ nhàng, kết thúc lắng đọng, truyền tải thông điệp sâu sắc và chạm tới trái tim người nghe.
 
 ## PHONG CÁCH VIẾT:
-✓ **Giọng văn**: Chậm rãi, sâu lắng, giàu hình ảnh, như đang kể chuyện đêm khuya
-✓ **Câu văn**: Ngắn gọn (1-3 câu/đoạn), dễ đọc, dễ nghe, phù hợp với AI voice
-✓ **Ngôn từ**: Trong sáng, giàu chất thơ, đậm chất Việt Nam
-✓ **Cảm xúc**: Tinh tế, không sướt mướt nhưng đủ lay động
-✓ **Nhịp điệu**: Linh hoạt - lúc chậm để lắng đọng, lúc nhanh để tạo kịch tính
+✓ **Giọng văn**: Chậm rãi, sâu lắng, mang màu sắc tâm sự trữ tình và lôi cuốn người nghe.
+✓ **Câu văn**: Viết câu hoàn chỉnh trọn vẹn, chấm câu rõ ràng (. ! ?). Đảm bảo kết thúc ở cuối mỗi đoạn văn là một câu trọn vẹn (không bị lửng lơ).
+✓ **Từ ngữ**: Trong sáng, giàu chất thơ, thuần Việt, phù hợp với giọng nói phát thanh.
+✓ **Cảm xúc**: Tự nhiên, chân thành, tránh sáo rỗng hay gượng gạo.
 
-## LƯU Ý:
-- KHÔNG dùng hội thoại quá dài, chủ yếu là kể chuyện
-- KHÔNG chia thành các phần như trên (viết liền mạch)
-- KHÔNG dùng tiêu đề phụ, chỉ viết thuần văn xuôi
-- ĐẶC BIỆT: Bối cảnh phải PHÙ HỢP VỚI TIÊU ĐỀ - nếu tiêu đề nhắc đến địa danh nào, hãy khai thác chất liệu văn hóa, con người nơi đó
-- Hãy để câu chuyện tự nhiên như đang kể cho người thân nghe
+## LƯU Ý NGHIÊM NGẶT:
+- KHÔNG sử dụng các tiêu đề phụ như "Đoạn 1", "Mở đầu", "Kết thúc" hay chia nhỏ thành các mục. Chỉ viết thuần văn xuôi thành 3 đoạn văn liền kề nhau.
+- KHÔNG viết hội thoại quá dài hay đối đáp liên tục. Chủ yếu dùng lời kể dẫn chuyện (storytelling).
 
 Bắt đầu câu chuyện ngay bây giờ:`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", // Switch to Flash to avoid quota issues
+        model: "gemini-3.5-flash",
         contents: prompt,
       });
 
@@ -176,7 +190,7 @@ Bắt đầu câu chuyện ngay bây giờ:`;
       setMovieContent(story);
       setReview(null); // Clear previous review if any
     } catch (error: any) {
-      console.error("Error generating random story:", error);
+      console.error("Error generating story:", error);
       if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
         setError("Hệ thống đang quá tải (hết lượt dùng thử). Vui lòng thử lại sau vài phút hoặc đổi chủ đề khác.");
       } else {
@@ -188,7 +202,7 @@ Bắt đầu câu chuyện ngay bây giờ:`;
   };
 
   const generateTTS = async (customText?: string) => {
-    const text = customText || (review ? `Phim: ${review.title}\nNội dung: ${review.content}` : '');
+    const text = customText || movieContent;
     if (!text) return;
     setTtsLoading(true);
     setTtsProgress(0);
@@ -198,14 +212,21 @@ Bắt đầu câu chuyện ngay bây giờ:`;
     audioParts.forEach(part => URL.revokeObjectURL(part.url));
     setAudioParts([]);
 
-    // Split text into 3 parts
-    const sentences = text.split(/[.!?]\s+/);
-    const partSize = Math.ceil(sentences.length / 3);
-    const textParts = [
-      sentences.slice(0, partSize).join('. ') + '.',
-      sentences.slice(partSize, partSize * 2).join('. ') + '.',
-      sentences.slice(partSize * 2).join('. ') + '.'
-    ].filter(p => p.trim().length > 1);
+    // Robust sentence splitting at boundary (. ! ?) preserving original punctuation
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const totalSentences = sentences.length;
+    
+    let textParts: string[] = [];
+    if (totalSentences <= 3) {
+      textParts = sentences.map(s => s.trim());
+    } else {
+      const partSize = Math.ceil(totalSentences / 3);
+      textParts = [
+        sentences.slice(0, partSize).join(' ').trim(),
+        sentences.slice(partSize, partSize * 2).join(' ').trim(),
+        sentences.slice(partSize * 2).join(' ').trim()
+      ].filter(p => p.length > 0);
+    }
 
     const progressInterval = setInterval(() => {
       setTtsProgress(prev => {
@@ -216,10 +237,12 @@ Bắt đầu câu chuyện ngay bây giờ:`;
 
     try {
       const newParts: { url: string, title: string }[] = [];
+      const selectedVoice = voiceGender === 'nam' ? 'Puck' : 'Kore';
 
       for (let i = 0; i < textParts.length; i++) {
         const partText = textParts[i];
-        const prompt = `Hãy đọc đoạn văn sau với giọng điệu sáng, ấm áp, nhẹ nhàng và truyền cảm. Nhấn nhá đúng chỗ, giữ nhịp điệu ổn định và tự nhiên: ${partText}`;
+        // Ensure synchronized tone, pace and voice characteristics for a consistent blog radio flow
+        const prompt = `Bạn là một phát thanh viên radio giọng ${voiceGender === 'nam' ? 'Nam trầm ấm, truyền cảm, cuốn hút' : 'Nữ dịu dàng, ngọt ngào, sâu lắng'}. Hãy đọc đoạn văn sau bằng tiếng Việt với chất giọng hoàn toàn đồng bộ, nhất quán, nhịp điệu phát thanh tự nhiên, trôi chảy, không có tạp âm hay vang vọng: ${partText}`;
 
         const response = await ai.models.generateContent({
           model: "gemini-2.5-flash-preview-tts",
@@ -228,7 +251,7 @@ Bắt đầu câu chuyện ngay bây giờ:`;
             responseModalities: [Modality.AUDIO],
             speechConfig: {
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: 'Kore' },
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
               },
             },
           },
@@ -393,23 +416,91 @@ Bắt đầu câu chuyện ngay bây giờ:`;
 
         {/* Search Section */}
         <div className="space-y-6 mb-16">
+          {/* Options & Configuration Dashboard */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-zinc-900/30 border border-zinc-800/80 rounded-3xl backdrop-blur-xl shadow-xl">
+            {/* Thể loại */}
+            <div className="space-y-3">
+              <label className="text-zinc-400 text-xs font-bold uppercase tracking-wider block">Thể loại kể chuyện</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'hai_huoc', name: 'Hài vui nhộn', icon: <Smile size={16} /> },
+                  { id: 'tinh_yeu', name: 'Tình yêu', icon: <Heart size={16} /> },
+                  { id: 'cha_me', name: 'Cha mẹ & Con cái', icon: <Users size={16} /> },
+                  { id: 'hoc_duong', name: 'Chuyện học đường', icon: <BookOpen size={16} /> },
+                  { id: 'tieu_lam', name: 'Tiếu lâm dân gian', icon: <Laugh size={16} /> }
+                ].map(genre => (
+                  <button
+                    key={genre.id}
+                    onClick={() => setSelectedGenre(genre.id)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all duration-200 active:scale-95 cursor-pointer",
+                      selectedGenre === genre.id
+                        ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-md shadow-emerald-500/5"
+                        : "bg-zinc-950/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                      genre.id === 'tieu_lam' ? "col-span-2 justify-center" : ""
+                    )}
+                  >
+                    {genre.icon}
+                    <span>{genre.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Giọng đọc & Gợi ý chủ đề */}
+            <div className="space-y-3 flex flex-col justify-between">
+              <div>
+                <label className="text-zinc-400 text-xs font-bold uppercase tracking-wider block mb-3">Giọng đọc phát thanh</label>
+                <div className="flex gap-2">
+                  {[
+                    { id: 'nam', name: 'Giọng Nam trầm ấm', desc: 'Trầm ấm, lôi cuốn' },
+                    { id: 'nu', name: 'Giọng Nữ nhẹ nhàng', desc: 'Truyền cảm, dịu dàng' }
+                  ].map(voice => (
+                    <button
+                      key={voice.id}
+                      onClick={() => setVoiceGender(voice.id)}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-xl border text-left transition-all duration-200 active:scale-95 cursor-pointer",
+                        voiceGender === voice.id
+                          ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-md shadow-emerald-500/5"
+                          : "bg-zinc-950/40 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      )}
+                    >
+                      <span className="block text-sm font-bold">{voice.name}</span>
+                      <span className="block text-[10px] opacity-60 mt-0.5">{voice.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Auto Suggest Button */}
+              <button
+                onClick={generateTopicSuggestion}
+                disabled={themeSuggestionLoading}
+                className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500/10 to-blue-500/10 hover:from-emerald-500/20 hover:to-blue-500/20 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/30 text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {themeSuggestionLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                Tự tạo chủ đề phát thanh
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
-              <div className="pl-4 text-zinc-500">
+            <div className="flex items-start gap-3 p-2 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus-within:border-emerald-500/50 transition-all shadow-2xl backdrop-blur-xl">
+              <div className="pl-4 pt-4 text-zinc-500">
                 <Film size={20} />
               </div>
-              <input 
-                type="text" 
-                placeholder="Nhập tiêu đề câu chuyện bạn muốn kể..."
-                className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600"
+              <textarea 
+                placeholder="Mô tả chi tiết về câu chuyện bạn muốn kể (ví dụ: bối cảnh, nhân vật, cốt truyện...)"
+                className="flex-1 bg-transparent border-none outline-none py-3 text-base placeholder:text-zinc-600 min-h-[120px] resize-none"
                 value={movieName}
                 onChange={(e) => setMovieName(e.target.value)}
               />
             </div>
 
             <textarea 
-              placeholder="Nhập tóm tắt nội dung hoặc cảm nhận sơ bộ của bạn về phim (tùy chọn)..."
-              className="w-full min-h-[160px] p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus:border-emerald-500/50 transition-all outline-none text-zinc-300 placeholder:text-zinc-600 resize-none backdrop-blur-xl"
+              placeholder="Nội dung câu chuyện sẽ được hiển thị ở đây sau khi bạn nhấn 'Viết Truyện'..."
+              className="w-full min-h-[240px] p-5 bg-zinc-900/50 border border-zinc-800 rounded-2xl focus:border-emerald-500/50 transition-all outline-none text-zinc-300 placeholder:text-zinc-600 resize-none backdrop-blur-xl"
               value={movieContent}
               onChange={(e) => setMovieContent(e.target.value)}
             />
@@ -439,12 +530,12 @@ Bắt đầu câu chuyện ngay bây giờ:`;
               Xóa
             </button>
             <button 
-              onClick={generateStoryFromTitle}
+              onClick={generateStoryFromDescription}
               disabled={randomLoading}
               className="px-4 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-sm font-bold rounded-xl transition-all flex items-center gap-2 border border-blue-500/30"
             >
               {randomLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-              Tạo Truyện
+              Viết Truyện
             </button>
             <button 
               onClick={() => generateTTS(movieContent)}
